@@ -56,8 +56,6 @@ public int linesOfCode(loc location){
   return c;
 }
 
-// top level functions
-
 public list[loc] getFiles(){
   return [l | l <- files(m)];
 }
