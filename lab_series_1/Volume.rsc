@@ -1,23 +1,72 @@
-// define a regex identifier
-// 1. create a M3 model
-// 2. get list/set pf al documents in a particular file -> file by file list[set[loc]]
-// 3. create AST -> (file loc, readFile(file loc), true, Version = "1.0")
-// 4. [model@src | /Expressions model := AST]
-// 5. write a function that checkes with string(location string).uri if the docs current is equal to the expression's
-// 6. if it is, then move on and check if a documentation's begin.line can be found in an expression's begin line
+module Volume
 
-public M3 getM3(loc location){
-  return createM3FromEclipseProject(location);
+import Map;
+import List;
+import Set;
+import String;
+import IO;
+
+import lang::java::m3::Core;
+import lang::java::jdt::m3::Core;
+import lang::java::m3::AST;
+import Prelude;
+
+public loc lcn = |project://smallsql0.21_src|;
+private M3 m = createM3FromEclipseProject(lcn);
+public loc file = |java+compilationUnit:///src/Testing.java|;
+
+public set[loc] getDocumentation(loc file){
+  return {d | d <- m@documentation[file], size(readFile(d)) > 0};
 }
 
-public list[set[loc]] getDocs(M3 model){
-  return [model@documentation[f] | f <- files(m)];
+public list[str] getComments(loc file){
+  return [readFile(d) | d <- getDocumentation(file)];
 }
 
-public list[set[str]] getComments(M3 model){
-  list[set[loc]] d = getDocs(model);
+public str removeComments(loc location){
+  f = readFile(location);
+  for (c <- getComments(location)){
+    f = replaceFirst(f,c,"");
+  }
+  return f; 
 }
 
-// [m@src | /Expression m := methodAST]
-//createAstFromString(|project://Java_1.0/src/Testing.java|,readFile(|project://Java_1.0/src/Testing.java|),true,Version = "1.0");
-// l.end.line
+private str removeTabs(loc location){
+  f = removeComments(location);
+  for (/\t/  := f){
+    f = replaceFirst(f,"\t","");
+  }
+  return f;  
+}
+
+public str removeNwLines(loc location){
+  f = removeTabs(location);
+  for (/<N:\n{2,}>/ := f){
+    f = replaceFirst(f,N,"\n");
+  }
+  return f;
+}
+
+public int linesOfCode(loc location){
+  f = removeNwLines(location);
+  int c = 0;
+  for(/\n/ := f)
+    c+=1;
+  return c;
+}
+
+// top level functions
+
+public list[loc] getFiles(){
+  return [l | l <- files(m)];
+}
+
+public num linesOfCodeProject(){
+  return sum([linesOfCode(l) | l <- getFiles()]);
+}
+
+
+
+
+
+
