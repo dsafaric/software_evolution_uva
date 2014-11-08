@@ -41,7 +41,8 @@ private str removeTabs(loc location){
 
 public str removeNwLines(loc location){
   f = removeTabs(location);
-  for (/<N:\n{2,}>/ := f){
+  for (/<N:\n{2,}>/ := f){  // the pattern /<N:\n{2,}>/ check for a sequence of \n greater than 2. So if you have
+                            // a case of \n\n\n\n\n or \n\n that will be recognised by the pattern
     f = replaceFirst(f,N,"\n");
   }
   return f;
