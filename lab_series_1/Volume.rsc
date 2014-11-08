@@ -64,9 +64,3 @@ public list[loc] getFiles(){
 public num linesOfCodeProject(){
   return sum([linesOfCode(l) | l <- getFiles()]);
 }
-
-
-
-
-
-
