@@ -6,24 +6,30 @@ import Set;
 import String;
 import IO;
 
-import lang::java::m3::Core;
 import lang::java::jdt::m3::Core;
+import lang::java::m3::Core;
 import lang::java::m3::AST;
+import util::Math;
 import Prelude;
+import Set;
 
-public loc lcn = |project://smallsql0.21_src|;
-private M3 m = createM3FromEclipseProject(lcn);
-public loc file = |java+compilationUnit:///src/Testing.java|;
+public loc lcn = |project://hsqldb-2.3.1|;
+public M3 m = createM3FromEclipseProject(lcn);
+public loc fl = |java+compilationUnit:///src/Testing.java|;
 
-public set[loc] getDocumentation(loc file){
-  return {d | d <- m@documentation[file], size(readFile(d)) > 0};
+private list[loc] getDocumentation(loc file){
+  return[d | d <- m@documentation[file], size(readFile(d)) > 0];
 }
 
-public list[str] getComments(loc file){
+private list[str] getComments(loc file){
   return [readFile(d) | d <- getDocumentation(file)];
 }
 
-public str removeComments(loc location){
+// check for the regex /<C:\/\*{1,}.*?\*{1,}>/ pattern! for removing the rest of the comments!
+
+public str fileStr(loc location) = removeNwLines(removeTabs(removeComments(location)));
+
+private str removeComments(loc location){
   f = readFile(location);
   for (c <- getComments(location)){
     f = replaceFirst(f,c,"");
@@ -31,35 +37,52 @@ public str removeComments(loc location){
   return f; 
 }
 
-private str removeTabs(loc location){
-  f = removeComments(location);
-  for (/\t/  := f){
-    f = replaceFirst(f,"\t","");
+private str removeTabs(str fileStr){
+  for (/<C:(\n\t){1,}|(\t\n){1,}>/  := fileStr){
+    fileStr = replaceLast(fileStr,C,"\n");
   }
-  return f;  
+  return fileStr;  
 }
 
-public str removeNwLines(loc location){
-  f = removeTabs(location);
-  for (/<N:\n{2,}>/ := f){  // the pattern /<N:\n{2,}>/ check for a sequence of \n greater than 2. So if you have
-                            // a case of \n\n\n\n\n or \n\n that will be recognised by the pattern
-    f = replaceFirst(f,N,"\n");
+private str removeNwLines(str fileStr){
+  for (/<N:\n{2,}>/ := fileStr){
+    fileStr = replaceFirst(fileStr,N,"\n");
   }
-  return f;
+  return fileStr;
 }
 
-public int linesOfCode(loc location){
-  f = removeNwLines(location);
+// get the number of LOC of a single file
+
+public int LOC(loc location){
+  f = fileStr(location);
   int c = 0;
   for(/\n/ := f)
     c+=1;
   return c;
 }
 
-public list[loc] getFiles(){
-  return [l | l <- files(m)];
+public list[map[int LN,loc f]] LOCPerFile(){
+  return [(LOC(file) : file) | file <- files(m)];
 }
 
-public num linesOfCodeProject(){
-  return sum([linesOfCode(l) | l <- getFiles()]);
+// volume measure for the entire project -> LOC measure
+
+public void LOCProject(){
+  int pLOC = 0;
+  for (L <- LOCPerFile()){
+    println(toList(L.f)[0].file + " LOC: " + toString(L.LN));
+    pLOC+=toList(L.LN)[0];
+  }
+  println("LOC Project: " + toString(sum([LOC(l) | l <- files(m)])));
+}
+
+// volume measure for the entire project -> Man years measure
+
+public str MY(){
+  int pLOC = toInt(sum([LOC(l) | l <- files(m)]));
+  return 	((pLOC >= 0 && pLOC <= 66000) ? "Man years 0-8 : Rank ++" : "") +
+  			((pLOC >= 66000 && pLOC <= 246000) ? "Man years 8-30 : Rank +" : "") +
+  			((pLOC >= 246000 && pLOC <= 665000) ? "Man years 30-80 : Rank o" : "") + 
+  			((pLOC >= 665000 && pLOC <= 1310000) ? "Man years 80-160 : Rank -" : "") + 
+  			((pLOC >= 1310000) ? "Man years 160 : Rank --" : "");
 }
