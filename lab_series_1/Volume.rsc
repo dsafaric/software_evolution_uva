@@ -46,7 +46,7 @@ private str removeTabs(str fileStr){
   return fileStr;  
 }
 
-private str removeNwLines(str fileStr){
+public str removeNwLines(str fileStr){
   for (/<N:\n{2,}>/ := fileStr){
     fileStr = replaceFirst(fileStr,N,"\n");
   }
@@ -91,9 +91,9 @@ public str MY(){
 
 // 2. UNIT SIZE MEASURMENTS
 
-public str getCommentsSingle(str s){
+public str getCommentsSingle(str s){	// works perfectly
   for (/<S:\/\/.*?\n{1,1}>/s := s){
-    s = replaceFirst(s,S,"");
+    s = replaceFirst(s,S,"\n");
   }
   return s;
 }
@@ -101,10 +101,10 @@ public str getCommentsSingle(str s){
 // grab the content of multi-line comments
 public str getCommentsMult(loc location){
   s = readFile(location);
-  for (/<S:\/\*{1,}|(.*?\n*?)\*{1,}\/>/m := s){
-    println("match found <S>");
+  for (/<S:\/\*{1,}|(.*?\n*?)\*{1,}\/>/ := s){
+    s = replaceFirst(s,S,"");
   }
-  return "";
+  return s;
 }
 
 public list[map [loc L, str C]] getMethods(){
