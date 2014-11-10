@@ -6,16 +6,18 @@ import Set;
 import String;
 import IO;
 
-import lang::java::jdt::m3::Core;
 import lang::java::m3::Core;
+import lang::java::jdt::m3::Core;
 import lang::java::m3::AST;
 import util::Math;
-import Prelude;
 import Set;
+import Prelude;
 
-public loc lcn = |project://hsqldb-2.3.1|;
+public loc lcn = |project://Java_1.0|;
 public M3 m = createM3FromEclipseProject(lcn);
 public loc fl = |java+compilationUnit:///src/Testing.java|;
+
+// 1. VOLUME MEASURMENTS
 
 private list[loc] getDocumentation(loc file){
   return[d | d <- m@documentation[file], size(readFile(d)) > 0];
@@ -85,4 +87,26 @@ public str MY(){
   			((pLOC >= 246000 && pLOC <= 665000) ? "Man years 30-80 : Rank o" : "") + 
   			((pLOC >= 665000 && pLOC <= 1310000) ? "Man years 80-160 : Rank -" : "") + 
   			((pLOC >= 1310000) ? "Man years 160 : Rank --" : "");
+}
+
+// 2. UNIT SIZE MEASURMENTS
+
+public str getCommentsSingle(str s){
+  for (/<S:\/\/.*?\n{1,1}>/s := s){
+    s = replaceFirst(s,S,"");
+  }
+  return s;
+}
+// /<S:(\/\*{1,}|\*{1,}\/)(.*|\n*)>/m
+// grab the content of multi-line comments
+public str getCommentsMult(loc location){
+  s = readFile(location);
+  for (/<S:\/\*{1,}|(.*?\n*?)\*{1,}\/>/m := s){
+    println("match found <S>");
+  }
+  return "";
+}
+
+public list[map [loc L, str C]] getMethods(){
+  return [(mth : getCommentsSingle(getCommentsMult(mth))) | mth <- methods(m)];
 }
