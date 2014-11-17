@@ -1,65 +1,64 @@
 module Volume
 
-import Map;
-import List;
-import Set;
-import String;
-import IO;
-
-import lang::java::m3::Core;
 import lang::java::jdt::m3::Core;
+import lang::java::m3::Core;
 import lang::java::m3::AST;
 import util::Math;
-import Set;
 import Prelude;
+import Set;
 
-public loc lcn = |project://Java_1.0|;
+private loc lcn = |project://smallsql0.21_src|;
 public M3 m = createM3FromEclipseProject(lcn);
 public loc fl = |java+compilationUnit:///src/Testing.java|;
 
-// 1. VOLUME MEASURMENTS
+/*
+	============= VOLUME MEASURMENTS =============
+*/
 
-private list[loc] getDocumentation(loc file){
-  return[d | d <- m@documentation[file], size(readFile(d)) > 0];
-}
-
-private list[str] getComments(loc file){
-  return [readFile(d) | d <- getDocumentation(file)];
-}
-
-// check for the regex /<C:\/\*{1,}.*?\*{1,}>/ pattern! for removing the rest of the comments!
-
-public str fileStr(loc location) = removeNwLines(removeTabs(removeComments(location)));
-
-private str removeComments(loc location){
-  f = readFile(location);
-  for (c <- getComments(location)){
-    f = replaceFirst(f,c,"");
+public str removeCommentSngLn(loc l){
+  f = readFile(l);	
+  for (/<S:\/\/.*?\n{1,1}>/s := f){
+    f = replaceFirst(f,S,"\n");
   }
-  return f; 
+  return f;
 }
 
-private str removeTabs(str fileStr){
-  for (/<C:(\n\t){1,}|(\t\n){1,}>/  := fileStr){
-    fileStr = replaceLast(fileStr,C,"\n");
+public str removeCommentMlLn(str f){
+  for (/<S:\/\*{1,}.*?\*{1,}\/>/s := f){
+    f = replaceFirst(f,S,"");
+  }
+  return f;
+}
+
+
+// the removeTabs function is optional
+public str removeTabs(str fileStr){
+  for (/<C:\t{1,}>/  := fileStr){
+    fileStr = replaceAll(fileStr,C,"");
   }
   return fileStr;  
 }
 
 public str removeNwLines(str fileStr){
-  for (/<N:\n{2,}>/ := fileStr){
-    fileStr = replaceFirst(fileStr,N,"\n");
+  for (/<N:\r+>/ := fileStr){	// the pattern matches carrier return regular expressions
+    fileStr = replaceAll(fileStr,N,"");	// replaces all of them with ""
+  }
+  for (/<S:(\n{2,})|(\n+\s+\n+)>/ := fileStr){	// every occurance of either \n\n+ or a white space
+    fileStr = replaceFirst(fileStr,S,"\n");		// is replaced by a single new line
   }
   return fileStr;
 }
 
-// get the number of LOC of a single file
+public str fileStr(loc location) = removeNwLines(
+									removeCommentMlLn(
+									removeTabs(
+									removeCommentSngLn(location))));
 
 public int LOC(loc location){
   f = fileStr(location);
   int c = 0;
   for(/\n/ := f)
-    c+=1;
+   c+=1;
   return c;
 }
 
@@ -67,19 +66,16 @@ public list[map[int LN,loc f]] LOCPerFile(){
   return [(LOC(file) : file) | file <- files(m)];
 }
 
-// volume measure for the entire project -> LOC measure
-
 public void LOCProject(){
   int pLOC = 0;
   for (L <- LOCPerFile()){
     println(toList(L.f)[0].file + " LOC: " + toString(L.LN));
     pLOC+=toList(L.LN)[0];
   }
-  println("LOC Project: " + toString(sum([LOC(l) | l <- files(m)])));
+  println("LOC Project: " + toString(pLOC));
 }
 
 // volume measure for the entire project -> Man years measure
-
 public str MY(){
   int pLOC = toInt(sum([LOC(l) | l <- files(m)]));
   return 	((pLOC >= 0 && pLOC <= 66000) ? "Man years 0-8 : Rank ++" : "") +
@@ -89,24 +85,141 @@ public str MY(){
   			((pLOC >= 1310000) ? "Man years 160 : Rank --" : "");
 }
 
-// 2. UNIT SIZE MEASURMENTS
+/*
+	============= UNIT MEASURMENTS =============
+*/
 
-public str getCommentsSingle(str s){	// works perfectly
-  for (/<S:\/\/.*?\n{1,1}>/s := s){
-    s = replaceFirst(s,S,"\n");
-  }
-  return s;
-}
-// /<S:(\/\*{1,}|\*{1,}\/)(.*|\n*)>/m
-// grab the content of multi-line comments
-public str getCommentsMult(loc location){
-  s = readFile(location);
-  for (/<S:\/\*{1,}|(.*?\n*?)\*{1,}\/>/ := s){
-    s = replaceFirst(s,S,"");
-  }
-  return s;
+public list[loc] mths = [mt | mt <- methods(m)];	// global variable of all methods
+
+public list[map [int LOC,loc L]] unitSizeMethods(){
+  return [(LOC(mth) : mth) | mth <- mths];
 }
 
-public list[map [loc L, str C]] getMethods(){
-  return [(mth : getCommentsSingle(getCommentsMult(mth))) | mth <- methods(m)];
+public void unitSize(){
+  for (u <- sort(unitSizeMethods())){
+    println(toList(u.L)[0].file + " LOC: " + toString(u.LOC));
+  }
 }
+
+alias Complexity = tuple[int level, loc method];
+
+// cyclomatic complexity - need to use the AST and then search for Statements
+
+public set[Declaration] getProjectAst(){
+  return {createAstFromFile(f,true,Version = "1.7") | f <- files(m)};
+}
+
+public list[Complexity] extractAst(){
+  set[Declaration] dcls = getProjectAst();
+  list[Complexity] lt = [];
+  
+  for(d <- dcls){
+    Complexity cc = <1,d@src>;
+    visit(d){
+      case m:\method(_,_,_,_,Statement impl): lt+=<getComplexity(impl),m@src>;
+      case m:\method(_,_,_,_): lt+=<1,m@src>;
+      case c:\constructor(_,_,_,Statement impl): lt+=<getComplexity(impl),c@src>;
+    }
+  }
+  return lt;
+}
+
+public int getComplexity(Statement stat){
+  int cc = 1;	// 1 is the default cyclomatic complexity of an unit
+  visit(stat){
+    case \case(_): cc+=1;
+   	case \if(_,_,_): cc+=1;
+   	case \if(_,_): cc+=1;
+   	case \for(_,_,_): cc+=1;
+   	case \for(_,_,_,_): cc+=1;
+	case \do(_,_): cc+=1;
+	case \foreach(_,_,_): cc+=1;
+	case \while(_,_): cc+=1;
+	case \try(_,_): cc+=1;
+	case \try(_,_,_): cc+=1;
+	case \infix(_,str operator,_):{ if (operator == "&&" || operator == "||") cc+=1;}
+  }
+  return cc;
+}
+/*public list[Complexity] getCC(){
+  list[Complexity] ccLst = [];
+  
+  for (a <- getUnitAst()){
+    Complexity currentComplexity = <1,0>;
+    bottom-up-break visit(a){
+      case \block(list[Statement] stats): 
+        currentComplexity.level+=toInt(sum([countCC(s) | s <- stats]));
+      case \switch(_, list[Statement] stats):
+        currentComplexity.level+=toInt(sum([countCC(s) | s <- stats]));
+    }
+    ccLst+=currentComplexity;
+  }
+  
+  
+  return ccLst;
+}
+
+public num countCC(Statement s){
+  visit(s){
+      case \case(_): return 1;
+   	  case \if(_,_,_): return 1;
+   	  case \if(_,_): return 1;
+   	  case \for(_,_,_): return 1;
+   	  case \for(_,_,_,_): return 1;
+	  case \do(_,_): return 1;
+	  case \foreach(_,_,_): return 1;
+	  case \while(_,_): return 1;
+  } //currentComplexity.level+=1;
+  return 0;
+}*/
+
+
+
+
+public list[num] cyclomaticComplexity(){
+  ccs = extractAst();
+  return 	[roundEval(size([v.level | v <- ccs, v.level >= 1 && v.level <= 10]),size(ccs)), 
+  			roundEval(size([v.level | v <- ccs, v.level >= 11 && v.level <= 20]),size(ccs)), 
+  			roundEval(size([v.level | v <- ccs, v.level >= 21 && v.level <= 50]),size(ccs)), 
+  			roundEval(size([v.level | v <- ccs, v.level > 50]),size(ccs))];
+}
+
+public num roundEval(num v, num s){
+   return v;
+}
+
+/*public num countStats(Statement stat){
+  top-down-break visit(stat){
+   	case switchCase(_,_):{
+   	  println("Switch");
+   	  return 1 + toInt(sum([countStats(s) | s <- stats]));
+   	}
+   	case \catch(_, Statement body): return 1 + countStats(body);
+   	case \do (Statement body, _): return 1 + countStats(body);
+   	case \while(_, Statement body): return 1 + countStats(body);
+   	case \if (_,thenBranch): return 1 + countStats(thenBranch);
+   	case \if (_,tBranch, eBranch): return 1 + countStats(tBranch) + countStats(eBranch);
+   	case \for(_,_,_,Statement body): return 1 + countStats(body);
+   	case \for(_,_,Statement body): return 1 + countStats(body);
+   	case \foreach(_,_,Statement body): return 1 + countStats(body);
+  }
+  return 0;
+}*/
+
+public num countStats2(Statement stat){
+  num ccLevel = 1;
+  top-down-break visit(stat){
+    case \if(_,Statement thenBranch): ccLevel += (1 + countStats2(thenBranch));
+    case \if(_,thenBranch,elseBranch): ccLevel += (1 + countStats2(thenBranch)) + (1 + countStats2(elseBranch));
+    case \infix("&&",_,_): ccLevel+=1;
+    case \infix("||",_,_): ccLevel+=1;
+    case \conditional(_,_,_): ccLevel+=1;
+    case \for(_,_,_,Statement body): ccLevel+=(1 + countStats2(body));
+    case \for(_,_,Statement body): ccLevel+=(1+countStats2(body));
+    case \switch(_,list[Statement] stats): ccLevel+=sum([1 + countStats2(s) | s <- stats]);
+    case \while(_,Statement body): ccLevel+=(1 + counStats2(body));
+    case \do(Statement body,_): ccLevel+=(1 + countStats2(body));
+  }
+  return ccLevel;
+}
+
